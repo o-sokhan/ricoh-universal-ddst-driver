@@ -1,95 +1,66 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Ricoh Universal DDST/GDI/LHPL Driver - macOS PKG Installer Generator
+# Build the macOS installer package.
+#
+#   packaging/build_pkg.sh [version] [output-dir]
+#
+# Optional signing (all skipped when unset, giving an unsigned package):
+#   APP_SIGN_IDENTITY   "Developer ID Application: ..."  signs the filters
+#   PKG_SIGN_IDENTITY   "Developer ID Installer: ..."    signs the .pkg
+#   NOTARY_PROFILE      notarytool keychain profile      notarizes + staples
+#
+# The package only places files under /Library/Printers. It has no install
+# scripts: it does not restart CUPS, add printers, or change sharing settings.
 # ==============================================================================
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${1:-$(git describe --tags --always 2>/dev/null | sed 's/^v//' || echo "0.1.0")}"
-PKG_OUTPUT_DIR="${2:-${SCRIPT_DIR}/dist}"
-mkdir -p "${PKG_OUTPUT_DIR}"
-PKG_OUTPUT_DIR="$(cd "${PKG_OUTPUT_DIR}" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VERSION="${1:-$(git -C "$ROOT" describe --tags --always 2>/dev/null | sed 's/^v//' || echo 0.0.0)}"
+OUT_DIR="${2:-$ROOT/dist}"
+IDENTIFIER="io.github.o-sokhan.ricoh-ddst-driver"
 
-echo "========================================================"
-echo " Building macOS PKG: Ricoh Universal DDST/GDI/LHPL Driver v${VERSION}"
-echo "========================================================"
+[ "$(uname -s)" = "Darwin" ] || { echo "Error: build_pkg.sh must run on macOS." >&2; exit 1; }
 
-if [ "$(uname -s)" != "Darwin" ]; then
-    echo "Warning: pkgbuild is a macOS native utility. If running outside macOS, this step requires macOS."
-    if ! command -v pkgbuild >/dev/null 2>&1; then
-        echo "Error: pkgbuild not found. Cannot build macOS .pkg on this host."
-        exit 1
-    fi
-fi
+WORK="$(mktemp -d -t ricoh_pkg)"
+trap 'rm -rf "$WORK"' EXIT
+PAYLOAD="$WORK/payload"
+FILTER_DIR="/Library/Printers/Ricoh/Filter"
 
-BUILD_ROOT="$(mktemp -d -t ricoh_pkg_build_XXXXXX)"
-SCRIPTS_DIR="$(mktemp -d -t ricoh_pkg_scripts_XXXXXX)"
-trap 'rm -rf "${BUILD_ROOT}" "${SCRIPTS_DIR}"' EXIT
-
-PAYLOAD_ROOT="${BUILD_ROOT}/payload"
-mkdir -p "${PAYLOAD_ROOT}/Library/Printers/Ricoh/Filter"
-mkdir -p "${PAYLOAD_ROOT}/Library/Printers/PPDs/Contents/Resources"
-mkdir -p "${PKG_OUTPUT_DIR}"
-
-# 1. Build binaries if needed
-cd "${SCRIPT_DIR}"
+cd "$ROOT"
+make clean >/dev/null
 make build
+make install DESTDIR="$PAYLOAD" OWNER= >/dev/null
 
-# 2. Copy binaries
-install -m 755 "${SCRIPT_DIR}/rastertoricohddst" "${PAYLOAD_ROOT}/Library/Printers/Ricoh/Filter/rastertoricohddst"
-install -m 755 "${SCRIPT_DIR}/rastertoricohjbig" "${PAYLOAD_ROOT}/Library/Printers/Ricoh/Filter/rastertoricohjbig"
-install -m 755 "${SCRIPT_DIR}/rastertoricohlhpl" "${PAYLOAD_ROOT}/Library/Printers/Ricoh/Filter/rastertoricohlhpl"
-
-# 3. Process and install PPDs with absolute macOS filter paths
-for ppd in "${SCRIPT_DIR}"/ppd/*.ppd; do
-    if [ -f "${ppd}" ]; then
-        filename="$(basename "${ppd}")"
-        sed 's|application/vnd.cups-raster 0 rastertoricohddst|application/vnd.cups-raster 0 /Library/Printers/Ricoh/Filter/rastertoricohddst|g; s|application/vnd.cups-raster 0 rastertoricohjbig|application/vnd.cups-raster 0 /Library/Printers/Ricoh/Filter/rastertoricohjbig|g; s|application/vnd.cups-raster 0 rastertoricohlhpl|application/vnd.cups-raster 0 /Library/Printers/Ricoh/Filter/rastertoricohlhpl|g' "${ppd}" > "${PAYLOAD_ROOT}/Library/Printers/PPDs/Contents/Resources/${filename}"
-        chmod 644 "${PAYLOAD_ROOT}/Library/Printers/PPDs/Contents/Resources/${filename}"
+for f in "$PAYLOAD$FILTER_DIR"/*; do
+    lipo -info "$f"
+    if [ -n "${APP_SIGN_IDENTITY:-}" ]; then
+        codesign --force --options runtime --timestamp \
+            --identifier "$IDENTIFIER.$(basename "$f")" \
+            --sign "$APP_SIGN_IDENTITY" "$f"
+        codesign --verify --strict --verbose=2 "$f"
     fi
 done
 
-# 4. Create postinstall script
-cat << 'EOF' > "${SCRIPTS_DIR}/postinstall"
-#!/bin/bash
-set -e
+mkdir -p "$OUT_DIR"
+PKG="$OUT_DIR/ricoh-ddst-driver-$VERSION.pkg"
+SIGN_ARGS=()
+[ -n "${PKG_SIGN_IDENTITY:-}" ] && SIGN_ARGS=(--sign "$PKG_SIGN_IDENTITY" --timestamp)
 
-# Fix permissions
-chown -R root:wheel /Library/Printers/Ricoh 2>/dev/null || true
-chmod -R 755 /Library/Printers/Ricoh 2>/dev/null || true
-chown root:wheel /Library/Printers/PPDs/Contents/Resources/ricoh-sp*.ppd 2>/dev/null || true
-chmod 644 /Library/Printers/PPDs/Contents/Resources/ricoh-sp*.ppd 2>/dev/null || true
+COPYFILE_DISABLE=1 pkgbuild \
+    --root "$PAYLOAD" \
+    --identifier "$IDENTIFIER" \
+    --version "$VERSION" \
+    --ownership recommended \
+    --install-location / \
+    ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} \
+    "$PKG"
 
-# Remove quarantine flags if any
-xattr -d com.apple.quarantine /Library/Printers/Ricoh/Filter/rastertoricohddst 2>/dev/null || true
-xattr -d com.apple.quarantine /Library/Printers/Ricoh/Filter/rastertoricohjbig 2>/dev/null || true
+if [ -n "${NOTARY_PROFILE:-}" ]; then
+    [ -n "${PKG_SIGN_IDENTITY:-}" ] || { echo "Error: notarization needs PKG_SIGN_IDENTITY." >&2; exit 1; }
+    xcrun notarytool submit "$PKG" --keychain-profile "$NOTARY_PROFILE" --wait
+    xcrun stapler staple "$PKG"
+fi
 
-# Refresh CUPS
-launchctl kickstart -k system/org.cups.cupsd 2>/dev/null || true
-
-echo "Ricoh Universal DDST/GDI/LHPL Driver installed successfully."
-exit 0
-EOF
-chmod 755 "${SCRIPTS_DIR}/postinstall"
-
-# 5. Build PKG using pkgbuild
-PKG_FILE="${PKG_OUTPUT_DIR}/ricoh-universal-ddst-driver-${VERSION}-macOS.pkg"
-
-export COPYFILE_DISABLE=1
-dot_clean -m "${PAYLOAD_ROOT}" 2>/dev/null || true
-find "${PAYLOAD_ROOT}" -name '._*' -delete 2>/dev/null || true
-xattr -rc "${PAYLOAD_ROOT}" 2>/dev/null || true
-
-pkgbuild \
-    --root "${PAYLOAD_ROOT}" \
-    --scripts "${SCRIPTS_DIR}" \
-    --identifier "io.github.ankitsingh99.ricoh-universal-ddst-driver" \
-    --version "${VERSION}" \
-    --ownership "recommended" \
-    --install-location "/" \
-    "${PKG_FILE}"
-
-echo ""
-echo "[OK] Successfully built macOS package:"
-echo "     ${PKG_FILE}"
-ls -lh "${PKG_FILE}"
+pkgutil --payload-files "$PKG"
+[ -n "${PKG_SIGN_IDENTITY:-}" ] && pkgutil --check-signature "$PKG"
+shasum -a 256 "$PKG"
