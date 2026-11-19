@@ -24,8 +24,8 @@ else
     COMPILER="cc"
 fi
 
-CPPFLAGS="-I/usr/local/include -I/usr/pkg/include -I/opt/homebrew/include"
-LDFLAGS="-L/usr/local/lib -L/usr/pkg/lib -L/opt/homebrew/lib"
+CPPFLAGS="-Ijbig"
+LDFLAGS=""
 
 if command -v cups-config >/dev/null 2>&1; then
     CPPFLAGS="$CPPFLAGS $(cups-config --cflags 2>/dev/null || true)"
@@ -33,7 +33,7 @@ if command -v cups-config >/dev/null 2>&1; then
 else
     CUPS_LIBS="-lcups"
 fi
-LIBS="$CUPS_LIBS -lcupsimage -ljbig"
+LIBS="$CUPS_LIBS -lcupsimage"
 
 echo "========================================================"
 echo " Running Ricoh DDST Driver Test & Coverage Suite"
@@ -64,24 +64,25 @@ echo "Corrupt raster data" > "${TMP_DIR}/corrupt.ras"
 # 4. Build filters with coverage instrumentation
 echo "[3/5] Compiling filter binaries with coverage instrumentation..."
 $COMPILER -O0 -g ${CPPFLAGS} -c "${TEST_DIR}/test_mocks.c" -o "${TMP_DIR}/test_mocks.o"
+$COMPILER -O0 -g ${CPPFLAGS} -c jbig/jbig.c -o "${TMP_DIR}/jbig.o"
+$COMPILER -O0 -g ${CPPFLAGS} -c jbig/jbig_ar.c -o "${TMP_DIR}/jbig_ar.o"
 
 $COMPILER -O0 -g --coverage -DSTATIC="" -DTESTING -Dmain=driver_main_ddst ${CPPFLAGS} -c rastertoricohddst.c -o rastertoricohddst.o
-$COMPILER --coverage rastertoricohddst.o "${TMP_DIR}/test_mocks.o" -Ddriver_main=driver_main_ddst "${TEST_DIR}/main_driver.c" ${LDFLAGS} -o "${TMP_DIR}/rastertoricohddst" ${LIBS}
+$COMPILER --coverage rastertoricohddst.o "${TMP_DIR}/jbig.o" "${TMP_DIR}/jbig_ar.o" "${TMP_DIR}/test_mocks.o" -Ddriver_main=driver_main_ddst "${TEST_DIR}/main_driver.c" ${LDFLAGS} -o "${TMP_DIR}/rastertoricohddst" ${LIBS}
 
 $COMPILER -O0 -g --coverage -DSTATIC="" -DTESTING -Dmain=driver_main_jbig ${CPPFLAGS} -c rastertoricohjbig.c -o rastertoricohjbig.o
-$COMPILER --coverage rastertoricohjbig.o "${TMP_DIR}/test_mocks.o" -Ddriver_main=driver_main_jbig "${TEST_DIR}/main_driver.c" ${LDFLAGS} -o "${TMP_DIR}/rastertoricohjbig" ${LIBS}
+$COMPILER --coverage rastertoricohjbig.o "${TMP_DIR}/jbig.o" "${TMP_DIR}/jbig_ar.o" "${TMP_DIR}/test_mocks.o" -Ddriver_main=driver_main_jbig "${TEST_DIR}/main_driver.c" ${LDFLAGS} -o "${TMP_DIR}/rastertoricohjbig" ${LIBS}
 
 $COMPILER -O0 -g --coverage -DSTATIC="" -DTESTING -Dmain=driver_main_lhpl -Ijbig ${CPPFLAGS} -c rastertoricohlhpl.c -o rastertoricohlhpl.o
 $COMPILER -O0 -g ${CPPFLAGS} -c jbig/jbig85.c -Ijbig -o "${TMP_DIR}/jbig85.o"
-$COMPILER -O0 -g ${CPPFLAGS} -c jbig/jbig_ar.c -Ijbig -o "${TMP_DIR}/jbig_ar.o"
 $COMPILER --coverage rastertoricohlhpl.o "${TMP_DIR}/jbig85.o" "${TMP_DIR}/jbig_ar.o" "${TMP_DIR}/test_mocks.o" -Ddriver_main=driver_main_lhpl "${TEST_DIR}/main_driver.c" ${LDFLAGS} -o "${TMP_DIR}/rastertoricohlhpl" ${LIBS}
 
 # Build unit test runners linking against the instrumented object files
 $COMPILER ${CPPFLAGS} -c "${TEST_DIR}/test_unit_ddst.c" -o "${TMP_DIR}/test_unit_ddst.o"
-$COMPILER --coverage "${TMP_DIR}/test_unit_ddst.o" rastertoricohddst.o "${TMP_DIR}/test_mocks.o" ${LDFLAGS} -o "${TMP_DIR}/test_unit_ddst" ${LIBS}
+$COMPILER --coverage "${TMP_DIR}/test_unit_ddst.o" rastertoricohddst.o "${TMP_DIR}/jbig.o" "${TMP_DIR}/jbig_ar.o" "${TMP_DIR}/test_mocks.o" ${LDFLAGS} -o "${TMP_DIR}/test_unit_ddst" ${LIBS}
 
 $COMPILER ${CPPFLAGS} -c "${TEST_DIR}/test_unit_jbig.c" -o "${TMP_DIR}/test_unit_jbig.o"
-$COMPILER --coverage "${TMP_DIR}/test_unit_jbig.o" rastertoricohjbig.o "${TMP_DIR}/test_mocks.o" ${LDFLAGS} -o "${TMP_DIR}/test_unit_jbig" ${LIBS}
+$COMPILER --coverage "${TMP_DIR}/test_unit_jbig.o" rastertoricohjbig.o "${TMP_DIR}/jbig.o" "${TMP_DIR}/jbig_ar.o" "${TMP_DIR}/test_mocks.o" ${LDFLAGS} -o "${TMP_DIR}/test_unit_jbig" ${LIBS}
 
 $COMPILER -Ijbig ${CPPFLAGS} -c "${TEST_DIR}/test_unit_lhpl.c" -o "${TMP_DIR}/test_unit_lhpl.o"
 $COMPILER --coverage "${TMP_DIR}/test_unit_lhpl.o" rastertoricohlhpl.o "${TMP_DIR}/jbig85.o" "${TMP_DIR}/jbig_ar.o" "${TMP_DIR}/test_mocks.o" ${LDFLAGS} -o "${TMP_DIR}/test_unit_lhpl" ${LIBS}
