@@ -22,12 +22,12 @@ The print filters are upstream's; the differences are:
 
 ## Install
 
-From a release: open `ricoh-ddst-driver-<version>.pkg`.
+From a release (once one is published): open `ricoh-ddst-driver-<version>.pkg`.
 
 From source (needs Xcode Command Line Tools):
 
 ```bash
-make
+make               # as your user, not with sudo
 sudo make install
 ```
 

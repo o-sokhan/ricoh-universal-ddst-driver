@@ -2,7 +2,7 @@
 # Ricoh DDST/GDI CUPS driver - macOS build
 #
 #   make                 build the three filters (universal arm64 + x86_64 on macOS)
-#   sudo make install    copy filters and PPDs into /Library/Printers (nothing else)
+#   sudo make install    copy filters and PPDs into /Library/Printers (run `make` first)
 #   sudo make uninstall  remove them again
 #   make test            unit + integration tests with coverage (macOS or Linux)
 #   make pkg             build an installer package in dist/ (macOS only)
@@ -16,7 +16,7 @@ CC           ?= cc
 CFLAGS       ?= -O2 -Wall -Wextra
 CPPFLAGS     += -Ijbig
 LIBS          = -lcups -lcupsimage
-VERSION      ?= $(shell git describe --tags --always 2>/dev/null | sed 's/^v//' || echo 0.0.0)
+VERSION      ?= $(shell v=$$(git describe --tags --always 2>/dev/null); echo $${v:-0.0.0} | sed 's/^v//')
 
 ifeq ($(UNAME),Darwin)
 ARCHFLAGS    ?= -arch arm64 -arch x86_64
@@ -45,7 +45,9 @@ rastertoricohlhpl: rastertoricohlhpl.c jbig/jbig85.c jbig/jbig_ar.c
 
 # PPDs reference filters by absolute path, so the CUPS filter search path
 # (/usr/libexec/cups/filter, SIP-protected) is never touched.
-install: build
+# Deliberately not depending on `build`, so sudo never compiles into root-owned files.
+install:
+	@for f in $(FILTERS); do [ -x $$f ] || { echo "Error: $$f not built. Run 'make' (without sudo) first." >&2; exit 1; }; done
 	install -d $(OWNER) -m 755 "$(DESTDIR)$(FILTER_DIR)" "$(DESTDIR)$(PPD_DIR)"
 	for f in $(FILTERS); do install $(OWNER) -m 755 $$f "$(DESTDIR)$(FILTER_DIR)/$$f"; done
 	for p in $(PPDS); do \

@@ -70,12 +70,15 @@ jobs:
             rm -f "$RUNNER_TEMP/$c.p12"
           done
           security set-key-partition-list -S apple-tool:,apple: -k "$KC_PASS" "$KC" >/dev/null
+          # keep existing keychains in the search list (word splitting intended)
+          # shellcheck disable=SC2046
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
           xcrun notarytool store-credentials ricoh-notary --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD" --keychain "$KC"
           {
             echo "APP_SIGN_IDENTITY=$(security find-identity -v -p codesigning "$KC" | awk -F'"' '/Developer ID Application/ {print $2; exit}')"
-            echo "PKG_SIGN_IDENTITY=$(security find-identity -v "$KC" | awk -F'"' '/Developer ID Installer/ {print $2; exit}')"
+            echo "PKG_SIGN_IDENTITY=$(security find-identity -v -p basic "$KC" | awk -F'"' '/Developer ID Installer/ {print $2; exit}')"
             echo "NOTARY_PROFILE=ricoh-notary"
+            echo "NOTARY_KEYCHAIN=$KC"
           } >> "$GITHUB_ENV"
 
       - name: Build package
