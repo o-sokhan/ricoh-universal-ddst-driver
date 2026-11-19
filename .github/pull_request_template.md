@@ -15,8 +15,8 @@
 Please verify the following where applicable:
 
 - [ ] Driver compiles cleanly without warnings (`make clean && make build`)
-- [ ] PPD profiles validate with `for f in ppd/*.ppd; do cupstestppd "$f"; done`
-- [ ] Shell scripts pass syntax check (`bash -n setup.sh test_print.sh uninstall.sh`)
+- [ ] PPD profiles validate with `for f in ppd/*.ppd ricoh-sp200.ppd; do cupstestppd "$f"; done`
+- [ ] Shell scripts pass syntax check (`bash -n detect_printer.sh test_print.sh packaging/*.sh tests/*.sh`)
 - [ ] Tested on macOS (if applicable)
 - [ ] Tested on Linux (if applicable)
 - [ ] Physical printer test page verified (if hardware available)

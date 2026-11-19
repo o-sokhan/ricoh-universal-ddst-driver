@@ -55,7 +55,7 @@ If you own any Ricoh DDST or LHPL printer (such as Ricoh SP 100, SP 111, SP 150,
      ```
    - Test shell scripts for syntax:
      ```bash
-     bash -n setup.sh test_print.sh uninstall.sh
+     bash -n detect_printer.sh test_print.sh packaging/*.sh tests/*.sh
      ```
 5. **Commit with descriptive commit messages** (e.g. Conventional Commits format `feat: ...`, `fix: ...`, `docs: ...`).
 6. **Push to your fork** and submit a Pull Request.

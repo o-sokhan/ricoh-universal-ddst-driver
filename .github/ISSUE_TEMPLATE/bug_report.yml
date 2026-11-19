@@ -67,7 +67,7 @@ body:
       label: Steps to Reproduce
       description: How do we reproduce the issue?
       value: |
-        1. Run './setup.sh' (or 'make install')
+        1. Run 'sudo make install'
         2. Send print job with 'lpr ...'
         3. See error ...
     validations:

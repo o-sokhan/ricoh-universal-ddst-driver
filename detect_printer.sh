@@ -232,8 +232,9 @@ else
         echo "  Device URI:       $DETECTED_URI"
         echo "  Discovery Source: $DETECTED_SOURCE"
         echo "=================================================================="
-        echo "To register this printer queue automatically, run:"
-        echo "  sudo ./setup.sh"
+        echo "To add it (not shared on the network):"
+        echo "  sudo lpadmin -p \"$DETECTED_QUEUE\" -E -v \"$DETECTED_URI\" \\"
+        echo "    -P /Library/Printers/PPDs/Contents/Resources/$(basename "$DETECTED_PPD") -o printer-is-shared=false"
     else
         echo "  Status:           NO ACTIVE PRINTER DETECTED"
         echo ""
