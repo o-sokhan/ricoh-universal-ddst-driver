@@ -63,8 +63,11 @@ Paper sizes A5, A6, B5 (JIS) and Executive are new and not yet confirmed on hard
 ## Uninstall
 
 ```bash
-sudo lpadmin -x Ricoh_SP203        # remove the queue, if you added one
-sudo make uninstall                # or delete /Library/Printers/Ricoh and /Library/Printers/PPDs/Contents/Resources/ricoh-sp*.ppd
+sudo lpadmin -x Ricoh_SP203                          # remove the queue, if you added one
+sudo make uninstall                                  # from a source checkout; or, after a .pkg install:
+sudo rm -rf /Library/Printers/Ricoh/Filter           # not /Library/Printers/Ricoh: Ricoh's own drivers live there too
+sudo rm /Library/Printers/PPDs/Contents/Resources/ricoh-sp*.ppd
+sudo pkgutil --forget io.github.o-sokhan.ricoh-ddst-driver
 ```
 
 ## Troubleshooting
